@@ -33,6 +33,9 @@ public class ExportRequest {
     private Boolean sarsCompliantOnly = false;
     private Boolean lockOnExport = false;
 
+    // Tax Summary selected method used by SARS exports
+    private String calculationMethod;
+
     // Email export
     private String email;
 }
