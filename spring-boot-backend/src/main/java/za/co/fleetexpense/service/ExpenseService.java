@@ -1682,8 +1682,10 @@ public class ExpenseService {
             log.warn("Failed to dismiss alerts for deleted expense {}: {}", id, e.getMessage());
         }
 
-        expenseRepository.delete(expense);
-        log.info("Deleted expense {}", id);
+        expense.setIsDeleted(true);
+        expense.setDeletedAt(java.time.OffsetDateTime.now());
+        expenseRepository.save(expense);
+        log.info("Soft deleted expense {}; retained for odometer calibration and audit history", id);
 
         // Check for odometer drift after deletion
         if (vehicleId != null) {

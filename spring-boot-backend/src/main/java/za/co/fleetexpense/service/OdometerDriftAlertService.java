@@ -66,7 +66,7 @@ public class OdometerDriftAlertService {
                 .orElseThrow(() -> new ResourceNotFoundException("Vehicle not found: " + vehicleId));
 
         Integer storedOdometer = vehicle.getCurrentOdometerStored();
-        Integer globalMax = expenseRepository.findMaxOdometerByVehicleId(vehicleId).orElse(storedOdometer);
+        Integer globalMax = expenseRepository.findMaxOdometerIncludingDeleted(vehicleId).orElse(storedOdometer);
         
         // Get individual expense type MAX values for enhanced drift detection
         Integer fuelMax = expenseRepository.findMaxFuelOdometerByVehicleId(vehicleId).orElse(0);

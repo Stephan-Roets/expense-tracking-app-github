@@ -92,6 +92,9 @@ public interface TripRepository extends JpaRepository<Trip, UUID> {
     @Query("SELECT t FROM Trip t LEFT JOIN FETCH t.organization LEFT JOIN FETCH t.vehicle LEFT JOIN FETCH t.user WHERE t.vehicle.id = :vehicleId ORDER BY t.tripDate DESC, t.createdAt DESC")
     List<Trip> findTopByVehicleIdOrderByEndDateDescWithVehicle(@Param("vehicleId") UUID vehicleId);
 
+    @Query(value = "SELECT MAX(t.end_odometer) FROM trips t WHERE t.vehicle_id = :vehicleId", nativeQuery = true)
+    Optional<Integer> findHistoricalMaxEndOdometer(@Param("vehicleId") UUID vehicleId);
+
     @Query("SELECT t FROM Trip t LEFT JOIN FETCH t.organization LEFT JOIN FETCH t.vehicle LEFT JOIN FETCH t.user WHERE t.vehicle.id = :vehicleId AND t.purpose = :purpose ORDER BY t.tripDate DESC, t.createdAt DESC")
     List<Trip> findTopByVehicleIdAndPurposeOrderByEndDateDescWithVehicle(@Param("vehicleId") UUID vehicleId, @Param("purpose") TripPurpose purpose);
 

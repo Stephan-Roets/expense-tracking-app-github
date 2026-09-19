@@ -54,6 +54,9 @@ public interface ExpenseRepository extends JpaRepository<Expense, UUID> {
         """)
     Optional<Integer> findMaxOdometerByVehicleId(@Param("vehicleId") UUID vehicleId);
 
+    @Query(value = "SELECT MAX(e.odometer_reading) FROM expenses e LEFT JOIN mechanic_services ms ON ms.expense_id = e.id WHERE e.vehicle_id = :vehicleId AND e.odometer_reading IS NOT NULL AND (e.category = 'FUEL_LOG' OR e.category = 'TIRES' OR (e.category = 'MECHANIC_SERVICE' AND ms.service_type IN ('MAJOR_SERVICE', 'MINOR_SERVICE', 'BRAKE_OVERHAUL')))", nativeQuery = true)
+    Optional<Integer> findMaxOdometerIncludingDeleted(@Param("vehicleId") UUID vehicleId);
+
     @Query("""
         SELECT e.vehicle.id, MAX(e.odometerReading)
         FROM Expense e
