@@ -261,8 +261,8 @@ public class TaxCalculationService {
      * Check eligibility based on eligibility matrix.
      * 
      * ACTUAL_COSTS:      EMPLOYEE+ALLOWANCE ✓ | EMPLOYEE+REIMB ✗ | SOLE_PROP ✓(+W&T) | COMPANY ✓
-     * SARS_COST_SCALE:   EMPLOYEE+ALLOWANCE ✓ | all others ✗
-     * SIMPLIFIED_REIMB:  EMPLOYEE+REIMB ✓ | all others ✗ (reason required)
+     * SARS_COST_SCALE:   EMPLOYEE+ALLOWANCE ✓ | SOLE_PROP+REIMB ✓
+     * SIMPLIFIED_REIMB:  EMPLOYEE+REIMB ✓ | SOLE_PROP+REIMB ✓ (AA rate)
      */
     public boolean isEligibleForMethod(
             TaxCalculationMethod method,
@@ -286,13 +286,16 @@ public class TaxCalculationService {
                 return false;
                 
             case SARS_COST_SCALE:
-                // EMPLOYEE+ALLOWANCE only
-                return TaxpayerType.EMPLOYEE.equals(taxpayerType) && 
-                       CompensationType.TRAVEL_ALLOWANCE.equals(compensationType);
+                // Employee allowance or sole proprietor reimbursement.
+                return (TaxpayerType.EMPLOYEE.equals(taxpayerType) &&
+                        CompensationType.TRAVEL_ALLOWANCE.equals(compensationType)) ||
+                       (TaxpayerType.SOLE_PROPRIETOR.equals(taxpayerType) &&
+                        CompensationType.REIMBURSEMENT.equals(compensationType));
                 
             case SIMPLIFIED_REIMBURSIVE:
-                // EMPLOYEE+REIMBURSEMENT only
-                return TaxpayerType.EMPLOYEE.equals(taxpayerType) && 
+                // Employee or sole proprietor reimbursement using AA prescribed rate.
+                return (TaxpayerType.EMPLOYEE.equals(taxpayerType) ||
+                        TaxpayerType.SOLE_PROPRIETOR.equals(taxpayerType)) &&
                        CompensationType.REIMBURSEMENT.equals(compensationType);
                 
             default:
@@ -320,20 +323,19 @@ public class TaxCalculationService {
                 return "Actual Costs not eligible for this taxpayer type/compensation combination";
                 
             case SARS_COST_SCALE:
-                if (!TaxpayerType.EMPLOYEE.equals(taxpayerType)) {
-                    return "SARS Cost Scale only eligible for EMPLOYEE+ALLOWANCE";
-                }
-                if (!CompensationType.TRAVEL_ALLOWANCE.equals(compensationType)) {
-                    return "SARS Cost Scale only eligible for EMPLOYEE+ALLOWANCE";
+                boolean employeeAllowance = TaxpayerType.EMPLOYEE.equals(taxpayerType) &&
+                        CompensationType.TRAVEL_ALLOWANCE.equals(compensationType);
+                boolean soleProprietorReimbursement = TaxpayerType.SOLE_PROPRIETOR.equals(taxpayerType) &&
+                        CompensationType.REIMBURSEMENT.equals(compensationType);
+                if (!employeeAllowance && !soleProprietorReimbursement) {
+                    return "SARS Cost Scale requires EMPLOYEE+ALLOWANCE or SOLE_PROPRIETOR+REIMBURSEMENT";
                 }
                 return "SARS Cost Scale not eligible for this taxpayer type/compensation combination";
                 
             case SIMPLIFIED_REIMBURSIVE:
-                if (!TaxpayerType.EMPLOYEE.equals(taxpayerType)) {
-                    return "Simplified Reimbursive only eligible for EMPLOYEE+REIMBURSEMENT";
-                }
-                if (!CompensationType.REIMBURSEMENT.equals(compensationType)) {
-                    return "Simplified Reimbursive only eligible for EMPLOYEE+REIMBURSEMENT";
+                if (!(TaxpayerType.EMPLOYEE.equals(taxpayerType) || TaxpayerType.SOLE_PROPRIETOR.equals(taxpayerType)) ||
+                    !CompensationType.REIMBURSEMENT.equals(compensationType)) {
+                    return "Simplified Reimbursive requires EMPLOYEE+REIMBURSEMENT or SOLE_PROPRIETOR+REIMBURSEMENT";
                 }
                 return "Simplified Reimbursive not eligible for this taxpayer type/compensation combination";
                 
