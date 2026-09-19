@@ -448,7 +448,7 @@ public class VehicleService {
 
         // Get the true MAX from expenses (includes FUEL_LOG, TIRES, scheduled MECHANIC_SERVICE)
         Integer computed = expenseRepository
-                .findMaxOdometerByVehicleId(vehicleId)
+                .findMaxOdometerIncludingDeleted(vehicleId)
                 .orElse(vehicle.getCurrentOdometerStored());
 
         // Update the STORED baseline to match reality

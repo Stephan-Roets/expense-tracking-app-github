@@ -5,6 +5,7 @@ import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.annotations.SQLRestriction;
 import org.hibernate.type.SqlTypes;
 import za.co.fleetexpense.entity.enums.TripPurpose;
 
@@ -15,6 +16,7 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Entity
+@SQLRestriction("is_deleted = false")
 @Table(name = "trips")
 @Getter
 @Setter
@@ -88,6 +90,14 @@ public class Trip {
     @Column(name = "is_locked", nullable = false)
     @Builder.Default
     private Boolean isLocked = false;
+
+    /** Soft-deleted trips remain available for odometer recalculation and audit history. */
+    @Column(name = "is_deleted", nullable = false)
+    @Builder.Default
+    private Boolean isDeleted = false;
+
+    @Column(name = "deleted_at")
+    private OffsetDateTime deletedAt;
 
     @Column(name = "locked_at")
     private OffsetDateTime lockedAt;

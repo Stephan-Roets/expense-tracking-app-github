@@ -18,6 +18,7 @@ import za.co.fleetexpense.exception.ResourceNotFoundException;
 import za.co.fleetexpense.exception.ValidationException;
 import za.co.fleetexpense.mapper.TripMapper;
 import za.co.fleetexpense.repository.OdometerVerificationRepository;
+import za.co.fleetexpense.repository.ExpenseRepository;
 import za.co.fleetexpense.repository.OrganizationRepository;
 import za.co.fleetexpense.repository.TripRepository;
 import za.co.fleetexpense.repository.UserAssistantRepository;
@@ -53,6 +54,7 @@ public class TripService {
     private final UserAssistantRepository userAssistantRepository;
     private final OdometerVerificationRepository odometerVerificationRepository;
     private final VehicleTaxProfileRepository vehicleTaxProfileRepository;
+    private final ExpenseRepository expenseRepository;
 
     // ==================== DTO-BASED CRUD OPERATIONS ====================
 
@@ -159,22 +161,17 @@ public class TripService {
 
             log.info("Vehicle found: {}, current odometer: {}", vehicle.getRegistrationNumber(), vehicle.getCurrentOdometer());
 
-            // Get the last trip's end odometer reading
-            List<Trip> lastTrips = tripRepository.findTopByVehicleIdOrderByEndDateDescWithVehicle(vehicleId);
-            Integer lastOdometer = null;
-            
-            log.info("Found {} trips for vehicle", lastTrips.size());
-            
-            if (!lastTrips.isEmpty()) {
-                lastOdometer = lastTrips.get(0).getEndOdometer();
-                log.info("Last trip end odometer: {}", lastOdometer);
-            }
+            // Rebuild the baseline from all historical trip and expense odometers.
+            // Hibernate hides soft-deleted rows from normal screens, so native historical
+            // queries are required here after an edit or delete.
+            Integer lastTripOdometer = tripRepository.findHistoricalMaxEndOdometer(vehicleId).orElse(null);
+            Integer lastExpenseOdometer = expenseRepository.findMaxOdometerIncludingDeleted(vehicleId).orElse(null);
+            Integer lastOdometer = java.util.stream.Stream.of(lastTripOdometer, lastExpenseOdometer, vehicle.getCurrentOdometer())
+                    .filter(java.util.Objects::nonNull)
+                    .max(Integer::compareTo)
+                    .orElse(null);
 
-            // Fall back to vehicle's current odometer if no trips found
-            if (lastOdometer == null) {
-                lastOdometer = vehicle.getCurrentOdometer();
-                log.info("Using vehicle current odometer: {}", lastOdometer);
-            }
+            log.info("Historical odometer baseline: trips={}, expenses={}, vehicle={}", lastTripOdometer, lastExpenseOdometer, vehicle.getCurrentOdometer());
 
             Map<String, Object> response = new HashMap<>();
             response.put("vehicleId", vehicleId);
@@ -464,8 +461,10 @@ public class TripService {
             throw new ValidationException("Cannot delete locked trip");
         }
 
-        tripRepository.delete(trip);
-        log.info("Deleted trip {}", id);
+        trip.setIsDeleted(true);
+        trip.setDeletedAt(java.time.OffsetDateTime.now());
+        tripRepository.save(trip);
+        log.info("Soft deleted trip {}; retained for odometer recalculation and audit history", id);
     }
 
     @Transactional

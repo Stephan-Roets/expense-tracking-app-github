@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.annotations.SQLRestriction;
 import za.co.fleetexpense.entity.enums.ExpenseCategory;
 import za.co.fleetexpense.enums.TaxExpenseClassification;
 
@@ -29,6 +30,7 @@ import java.util.UUID;
  * - Other fixed expenses
  */
 @Entity
+@SQLRestriction("is_deleted = false")
 @Table(name = "expenses", indexes = {
     @Index(name = "idx_expenses_organization", columnList = "organization_id"),
     @Index(name = "idx_expenses_vehicle", columnList = "vehicle_id"),
@@ -115,6 +117,14 @@ public class Expense {
     @Column(name = "is_locked", nullable = false)
     @Builder.Default
     private Boolean isLocked = false;
+
+    /** Soft-deleted entries stay available for odometer calibration and audit history. */
+    @Column(name = "is_deleted", nullable = false)
+    @Builder.Default
+    private Boolean isDeleted = false;
+
+    @Column(name = "deleted_at")
+    private OffsetDateTime deletedAt;
 
     @Column(name = "locked_at")
     private OffsetDateTime lockedAt;
