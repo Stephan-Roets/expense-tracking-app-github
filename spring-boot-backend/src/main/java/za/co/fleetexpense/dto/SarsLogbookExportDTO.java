@@ -35,6 +35,8 @@ public class SarsLogbookExportDTO {
     private BigDecimal maintenanceExpenses;
     private BigDecimal fixedExpenses;
     private BigDecimal deductibleExpenses;
+    private String selectedCalculationMethod;
+    private String deductionFormula;
 
     // Phase 1: Provisional Actual Costs estimate (not a final SARS deduction)
     private BigDecimal provisionalActualCostsEstimate;

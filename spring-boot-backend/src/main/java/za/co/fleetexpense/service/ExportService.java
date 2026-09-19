@@ -24,6 +24,9 @@ import za.co.fleetexpense.repository.OdometerDriftAlertRepository;
 import za.co.fleetexpense.repository.OdometerVerificationRepository;
 import za.co.fleetexpense.repository.TripRepository;
 import za.co.fleetexpense.repository.VehicleRepository;
+import za.co.fleetexpense.repository.VehicleTaxProfileRepository;
+import za.co.fleetexpense.entity.VehicleTaxProfile;
+import za.co.fleetexpense.entity.enums.TaxCalculationMethod;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -37,6 +40,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Base64;
@@ -63,6 +67,8 @@ public class ExportService {
     private final TemplateEngine templateEngine;
     private final EntryImageService entryImageService;
     private final PermissionService permissionService;
+    private final TaxCalculationService taxCalculationService;
+    private final VehicleTaxProfileRepository vehicleTaxProfileRepository;
 
     public byte[] exportSarsLogbook(ExportRequest request, UUID organizationId, String username, String userRole) {
         // Check EXPORT_SARS_LOGBOOK permission
@@ -151,6 +157,36 @@ public class ExportService {
         return generateEnhancedSarsLogbookExcel(exportData, request);
     }
 
+    private record TaxCalculationSelection(TaxCalculationMethod method, TaxCalculationResult result, String formula) {}
+
+    private TaxCalculationSelection calculateSelectedDeduction(UUID vehicleId, ExportRequest request, TaxYearSummaryDTO summary) {
+        VehicleTaxProfile profile = vehicleTaxProfileRepository.findByVehicleIdAndEffectiveToIsNull(vehicleId)
+                .orElseThrow(() -> new ResourceNotFoundException("Active vehicle tax profile not found"));
+        LocalDate start = LocalDate.of(request.getTaxYear(), 3, 1);
+        LocalDate end = LocalDate.of(request.getTaxYear() + 1, 2, 28).with(java.time.temporal.TemporalAdjusters.lastDayOfMonth());
+        BigDecimal businessKm = BigDecimal.valueOf(summary.getBusinessKm() == null ? 0 : summary.getBusinessKm());
+        BigDecimal totalKm = BigDecimal.valueOf(summary.getTotalKm() == null ? 0 : summary.getTotalKm());
+        TaxCalculationMethod method = request.getCalculationMethod() == null
+                ? TaxCalculationMethod.ACTUAL_COSTS
+                : TaxCalculationMethod.valueOf(request.getCalculationMethod());
+        TaxCalculationResult result = switch (method) {
+            case ACTUAL_COSTS -> taxCalculationService.calculateActualCosts(profile,
+                    BigDecimal.valueOf(summary.getQualifyingCurrentExpenseCents() == null ? 0 : summary.getQualifyingCurrentExpenseCents()),
+                    businessKm, totalKm, start, end);
+            case SARS_COST_SCALE -> taxCalculationService.calculateSarsCostScale(profile, start, end, businessKm, totalKm);
+            case SIMPLIFIED_REIMBURSIVE -> taxCalculationService.calculateSimplifiedReimbursive(profile, start, end, businessKm);
+        };
+        if (!Boolean.TRUE.equals(result.getEligible())) {
+            throw new za.co.fleetexpense.exception.ValidationException(result.getIneligibilityReason());
+        }
+        String formula = switch (method) {
+            case ACTUAL_COSTS -> "Qualifying costs × (business KM ÷ total KM); private KM reduces the deductible share";
+            case SARS_COST_SCALE -> "SARS fixed cost scale × business-use share + qualifying fuel/maintenance";
+            case SIMPLIFIED_REIMBURSIVE -> "SARS prescribed AA rate × business KM";
+        };
+        return new TaxCalculationSelection(method, result, formula);
+    }
+
     private SarsLogbookExportDTO gatherExportData(ExportRequest request, UUID orgId, String username) {
         // If vehicleId is null, export all vehicles for the organization
         if (request.getVehicleId() == null) {
@@ -167,16 +203,9 @@ public class ExportService {
         TaxYearSummaryDTO taxSummary = taxYearSummaryService.calculateSummary(vehicle.getId(), taxYear, vehicle.getOrganization().getId());
         log.info("SARS logbook data retrieved successfully");
 
-        // Phase 1: Calculate provisional Actual Costs estimate
-        BigDecimal provisionalActualCostsEstimate = BigDecimal.ZERO;
-        if (taxSummary.getQualifyingCurrentExpenseCents() != null && taxSummary.getTotalKm() != null && taxSummary.getTotalKm() > 0) {
-            BigDecimal businessShare = BigDecimal.valueOf(taxSummary.getBusinessKm())
-                    .divide(BigDecimal.valueOf(taxSummary.getTotalKm()), 10, RoundingMode.HALF_UP);
-            provisionalActualCostsEstimate = BigDecimal.valueOf(taxSummary.getQualifyingCurrentExpenseCents())
-                    .divide(BigDecimal.valueOf(100)) // Convert cents to Rands
-                    .multiply(businessShare)
-                    .setScale(2, RoundingMode.HALF_UP);
-        }
+        TaxCalculationSelection selection = calculateSelectedDeduction(vehicle.getId(), request, taxSummary);
+        BigDecimal deductibleRands = selection.result().getTotalDeductionCents()
+                .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
 
         SarsLogbookExportDTO.SarsLogbookExportDTOBuilder builder = SarsLogbookExportDTO.builder()
                 .vehicleId(vehicle.getId())
@@ -195,9 +224,11 @@ public class ExportService {
                 .fuelExpenses(taxSummary.getFuelExpensesZar())
                 .maintenanceExpenses(taxSummary.getMaintenanceExpensesZar())
                 .fixedExpenses(taxSummary.getFixedExpensesZar())
-                .deductibleExpenses(provisionalActualCostsEstimate)
-                .provisionalActualCostsEstimate(provisionalActualCostsEstimate)
-                .calculationMethodLabel("Provisional Actual Costs estimate")
+                .deductibleExpenses(deductibleRands)
+                .selectedCalculationMethod(selection.method().name())
+                .deductionFormula(selection.formula())
+                .provisionalActualCostsEstimate(deductibleRands)
+                .calculationMethodLabel(selection.result().getBracketDescription())
                 .generatedAt(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")))
                 .generatedBy(username)
                 .organizationName(vehicle.getOrganization().getName());
@@ -1233,12 +1264,15 @@ public class ExportService {
         sheet.createRow(rowNum++).createCell(0).setCellValue("BUSINESS USE SUMMARY");
         sheet.createRow(rowNum++).createCell(0).setCellValue("Business Kilometres: " + data.getBusinessKm());
         sheet.createRow(rowNum++).createCell(0).setCellValue("Private Kilometres: " + data.getPrivateKm());
-        sheet.createRow(rowNum++).createCell(0).setCellValue("Business Use Percentage: " + data.getBusinessPercentage() + "%");
+  sheet.createRow(rowNum++).createCell(0).setCellValue("Business Use Percentage: " + data.getBusinessPercentage() + "%");
+  sheet.createRow(rowNum++).createCell(0).setCellValue("Selected Tax Method: " + data.getSelectedCalculationMethod());
+  sheet.createRow(rowNum++).createCell(0).setCellValue("Deduction (ZAR): " + data.getDeductibleExpenses());
+  sheet.createRow(rowNum++).createCell(0).setCellValue("Formula: " + data.getDeductionFormula());
 
-        rowNum++;
-        sheet.createRow(rowNum++).createCell(0).setCellValue("DATA QUALITY STATUS");
-        sheet.createRow(rowNum++).createCell(0).setCellValue("Odometer Drift Status: RESOLVED");
-        sheet.createRow(rowNum++).createCell(0).setCellValue("Submission Valid: YES");
+  rowNum++;
+  sheet.createRow(rowNum++).createCell(0).setCellValue("DATA QUALITY STATUS");
+  sheet.createRow(rowNum++).createCell(0).setCellValue("Odometer Drift Status: Checked before export");
+  sheet.createRow(rowNum++).createCell(0).setCellValue("Submission Valid: YES (active drift blocked this export)");
 
         rowNum++;
         sheet.createRow(rowNum++).createCell(0).setCellValue("DECLARATION");
