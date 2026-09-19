@@ -1,0 +1,180 @@
+# Spring Boot Configuration
+spring:
+  application:
+    name: fleet-expense-api
+  
+  # Database Configuration
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:expense_tracking_app}
+    username: ${DB_USERNAME:stefan}
+    password: ${DB_PASSWORD:test123}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+  # JPA Configuration
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        jdbc:
+          time_zone: Africa/Johannesburg
+    open-in-view: false
+
+  # Flyway Database Migration
+  flyway:
+    enabled: true
+    validate-on-migrate: false
+    validate-migration-naming: false
+    locations: classpath:db/migration
+  
+  # File Upload Configuration
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 20MB
+
+  web:
+    resources:
+      add-mappings: false
+
+# Server Configuration
+server:
+  port: ${PORT:8080}
+  compression:
+    enabled: true
+    mime-types: application/json,application/xml,text/html,text/plain
+
+# JWT Configuration
+jwt:
+  secret: ${JWT_SECRET}
+  access-token-expiration: 86400000  # 24 hours in milliseconds
+  refresh-token-expiration: 604800000  # 7 days in milliseconds
+
+# Application Configuration
+app:
+  base-url: ${APP_BASE_URL:https://fleet-expense-app.duckdns.org}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://10.0.0.100:3000,http://localhost:3000,https://vehicle-expense-and-sa-fleet-manage.vercel.app}
+  tax:
+    # South African tax year runs March to February
+    year-start-month: 3
+    year-end-month: 2
+    odometer-mismatch-tolerance-km: 1
+  alerts:
+    expiry:
+      critical-days: 7
+      warning-days: 30
+      upcoming-days: 90
+    tyre-rotation:
+      critical-km: 1000
+      warning-km: 0
+      upcoming-km: -1000
+
+# Storage Configuration
+storage:
+  base-path: ${STORAGE_BASE_PATH:/app/storage}
+
+# Odometer Configuration
+odometer:
+  computed: true
+  auto-recalculate: true
+
+# Brevo Email Configuration
+brevo:
+  api-key: ${BREVO_API_KEY}
+  sender-email: ${BREVO_SENDER_EMAIL}
+  sender-name: ${BREVO_SENDER_NAME:Fleet Expense}
+
+# OCI Object Storage Configuration
+oci:
+  enabled: ${OCI_ENABLED:false}
+  tenancy-id: ${OCI_TENANCY_OCID:ocid1.tenancy.oc1..aaaaaaaafsl6jfgd7i7llgnqcsg7zgedyn6w2ogedvqmtcpmz7s736ioexiq}
+  user-id: ${OCI_USER_OCID:ocid1.user.oc1..aaaaaaaazrxmaengu2ppsvg4436xelxjel25d6mvi3vsjhy2gktm5fforwaa}
+  fingerprint: ${OCI_FINGERPRINT:67:2a:af:b1:75:87:3c:48:63:b5:ff:56:32:57:73:58}
+  region: ${OCI_REGION:af-johannesburg-1}
+  bucket-name: ${OCI_BUCKET_NAME:fleet-expense-backup}
+  namespace: ${OCI_NAMESPACE:axvzaa7pqlsc}
+  private-key-path: ${OCI_KEY_FILE:/app/oci_api_key.pem}
+
+# Actuator Endpoints
+management:
+  endpoints:
+    web:
+      exposure:
+        include: ${ACTUATOR_ENDPOINTS:health,info,metrics}
+  endpoint:
+    health:
+      show-details: ${ACTUATOR_HEALTH_DETAILS:when_authorized}
+
+# Logging Configuration
+logging:
+  level:
+    root: INFO
+    za.co.fleetexpense: DEBUG
+    org.springframework.security: DEBUG
+    org.hibernate.SQL: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# OpenAPI Configuration
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+
+---
+# Development Profile
+spring:
+  config:
+    activate:
+      on-profile: dev
+  jpa:
+    show-sql: true
+
+logging:
+  level:
+    za.co.fleetexpense: DEBUG
+    org.hibernate.SQL: DEBUG
+
+---
+# Production Profile
+spring:
+  config:
+    activate:
+      on-profile: prod
+  jpa:
+    show-sql: false
+
+# Disable Swagger in production
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+# Restrict actuator in production
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+
+logging:
+  level:
+    root: WARN
+    za.co.fleetexpense: DEBUG

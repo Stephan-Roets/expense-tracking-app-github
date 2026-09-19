@@ -1,0 +1,35 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+oci_key*
+
+# Dependencies and generated output
+node_modules/
+.next/
+out/
+dist/
+build/
+.gradle/
+*.class
+*.jar
+
+# Runtime data and logs
+uploads/
+static/uploads/
+*.log
+
+# IDE and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# TypeScript/cache
+*.tsbuildinfo
+coverage/
+.vercel/

@@ -1,0 +1,19 @@
+package za.co.fleetexpense.entity.enums;
+
+public enum SectionType {
+    EXTERIOR_FRONT,
+    EXTERIOR_REAR,
+    EXTERIOR_FRONT_LEFT,
+    EXTERIOR_REAR_LEFT,
+    EXTERIOR_FRONT_RIGHT,
+    EXTERIOR_REAR_RIGHT,
+    EXTERIOR_TOP,
+    EXTERIOR_UNDERCARRIAGE,
+    INTERIOR,
+    ENGINE,
+    TIRES,
+    LIGHTS,
+    BRAKES,
+    FLUIDS,
+    DOCUMENTATION
+}

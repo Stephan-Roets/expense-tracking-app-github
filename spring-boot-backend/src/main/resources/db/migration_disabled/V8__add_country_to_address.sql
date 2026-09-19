@@ -1,0 +1,1 @@
+ALTER TABLE address ADD COLUMN country VARCHAR(255) NOT NULL DEFAULT 'South Africa';

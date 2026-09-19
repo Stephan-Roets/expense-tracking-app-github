@@ -1,0 +1,12 @@
+-- ============================================
+-- MIGRATE NULL TRIP PURPOSES TO UNCLASSIFIED
+-- ============================================
+-- This migration runs after V__add_unclassified_to_trip_purpose_enum.sql
+-- which adds the UNCLASSIFIED value to the enum
+
+-- DISABLED: This is a data migration for existing data
+-- Not needed for fresh database installation
+-- Migrate null or unrecognized values to UNCLASSIFIED
+-- UPDATE trips
+-- SET purpose = 'UNCLASSIFIED'
+-- WHERE purpose IS NULL OR purpose NOT IN ('BUSINESS', 'PRIVATE');
